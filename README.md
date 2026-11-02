@@ -18,4 +18,5 @@ pour que celui si soit fonctionnel sur Windows il faut tout d'abord changé l'ex
 - matplotlib
 - pttsx3
 - keyboard 
+
 nb : ce programme n'as été développée que pour Windows et nécessite l'installation de python car c'est grâce à celui si qu'il a été mit au point.
