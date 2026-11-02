@@ -1,0 +1,161 @@
+import time, re, pyttsx3, keyboard, argparse, traceback
+from scapy.all import sniff, IP, TCP, UDP, ICMP, Raw, ARP
+from collections import defaultdict
+from cts_gui import CTSInterface
+import threading
+import sys
+
+# --- Interface graphique ---
+gui = CTSInterface()
+
+# --- Compteurs globaux ---
+tcp_count = udp_count = icmp_count = 0
+connections = defaultdict(list)
+arp_table = {}
+
+# Seuils configurables
+PORT_SCAN_THRESHOLD, PORT_SCAN_WINDOW = 10, 5
+SYN_FLOOD_THRESHOLD, SYN_FLOOD_WINDOW = 50, 5
+UDP_FLOOD_THRESHOLD, UDP_FLOOD_WINDOW = 100, 5
+ICMP_FLOOD_THRESHOLD, ICMP_FLOOD_WINDOW = 50, 5
+
+SUSPICIOUS_KEYWORDS = ["login", "verify", "update", "secure", "bank"]
+
+# Synthèse vocale
+engine = pyttsx3.init()
+
+# Argument au lancement (--mute pour démarrer sans voix)
+parser = argparse.ArgumentParser()
+parser.add_argument("--mute", action="store_true", help="Démarrer sans synthèse vocale")
+args = parser.parse_args()
+ENABLE_VOICE = not args.mute
+
+def speak(message):
+    if ENABLE_VOICE:
+        try:
+            engine.say(message)
+            engine.runAndWait()
+        except Exception as e:
+            print("Erreur synthèse vocale :", e)
+
+def classify(level, message):
+    global tcp_count, udp_count, icmp_count
+    msg = f"[{level.capitalize()}] - {message}"
+    print(msg)
+    speak(msg)
+    try:
+        gui.update_stats(tcp_count, udp_count, icmp_count, level)
+    except Exception as e:
+        print("Erreur mise à jour GUI :", e)
+
+# --- Détections séparées ---
+def detect_port_scan(packet, now, src_ip):
+    global tcp_count
+    if packet.haslayer(TCP):
+        tcp_count += 1
+        dst_port = packet[TCP].dport
+        connections[src_ip].append((dst_port, now))
+        ports = {p for p, t in connections[src_ip] if isinstance(p, int) and now - t < PORT_SCAN_WINDOW}
+        if len(ports) > PORT_SCAN_THRESHOLD:
+            classify("dangereux", f"Scan de ports détecté depuis {src_ip}")
+        elif len(ports) > PORT_SCAN_THRESHOLD // 2:
+            classify("suspect", f"Activité de ports élevée depuis {src_ip}")
+        else:
+            classify("normal", f"Connexion TCP depuis {src_ip}:{dst_port}")
+
+def detect_syn_flood(packet, now, src_ip):
+    global tcp_count
+    if packet.haslayer(TCP):
+        tcp_count += 1
+        flags = packet[TCP].flags
+        if flags & 0x02:  # SYN
+            syn_recent = sum(1 for p, t in connections[src_ip] if isinstance(p, int) and now - t < SYN_FLOOD_WINDOW)
+            if syn_recent > SYN_FLOOD_THRESHOLD:
+                classify("dangereux", f"SYN flood détecté depuis {src_ip}")
+            elif syn_recent > SYN_FLOOD_THRESHOLD // 2:
+                classify("suspect", f"Activité SYN élevée depuis {src_ip}")
+
+def detect_udp_flood(packet, now, src_ip):
+    global udp_count
+    if packet.haslayer(UDP):
+        udp_count += 1
+        connections[src_ip].append(("UDP", now))
+        udp_recent = sum(1 for p, t in connections[src_ip] if p == "UDP" and now - t < UDP_FLOOD_WINDOW)
+        if udp_recent > UDP_FLOOD_THRESHOLD:
+            classify("dangereux", f"UDP flood détecté depuis {src_ip}")
+        elif udp_recent > UDP_FLOOD_THRESHOLD // 2:
+            classify("suspect", f"Activité UDP élevée depuis {src_ip}")
+        else:
+            classify("normal", f"Paquet UDP depuis {src_ip}")
+
+def detect_icmp_flood(packet, now, src_ip):
+    global icmp_count
+    if packet.haslayer(ICMP):
+        icmp_count += 1
+        connections[src_ip].append(("ICMP", now))
+        icmp_recent = sum(1 for p, t in connections[src_ip] if p == "ICMP" and now - t < ICMP_FLOOD_WINDOW)
+        if icmp_recent > ICMP_FLOOD_THRESHOLD:
+            classify("dangereux", f"ICMP flood détecté depuis {src_ip}")
+        elif icmp_recent > ICMP_FLOOD_THRESHOLD // 2:
+            classify("suspect", f"Activité ICMP élevée depuis {src_ip}")
+        else:
+            classify("normal", f"Ping ICMP depuis {src_ip}")
+
+def detect_phishing(packet):
+    if packet.haslayer(TCP) and packet.haslayer(Raw):
+        try:
+            payload = packet[Raw].load.decode(errors="ignore")
+            urls = re.findall(r"https?://[^\s]+", payload)
+            for url in urls:
+                if any(keyword in url.lower() for keyword in SUSPICIOUS_KEYWORDS):
+                    classify("dangereux", f"Phishing détecté : {url}")
+        except Exception:
+            pass
+
+def detect_arp_spoofing(packet):
+    if packet.haslayer(ARP) and packet[ARP].op == 2:  # ARP reply
+        ip, mac = packet[ARP].psrc, packet[ARP].hwsrc
+        if ip in arp_table and arp_table[ip] != mac:
+            classify("dangereux", f"Possible ARP spoofing : {ip} avait {arp_table[ip]}, maintenant {mac}")
+        else:
+            classify("normal", f"Nouvelle association ARP : {ip} -> {mac}")
+        arp_table[ip] = mac
+
+def detect(packet):
+    now = time.time()
+    try:
+        if packet.haslayer(IP):
+            src_ip = packet[IP].src
+            detect_port_scan(packet, now, src_ip)
+            detect_syn_flood(packet, now, src_ip)
+            detect_udp_flood(packet, now, src_ip)
+            detect_icmp_flood(packet, now, src_ip)
+        detect_phishing(packet)
+        detect_arp_spoofing(packet)
+    except Exception as e:
+        print("Erreur dans la détection :", e)
+        traceback.print_exc()
+
+def start_sniffer():
+    try:
+    phonk a telecharger 
+vai vai  trair phonk
+mente ma phonk
+clima lindo slowed
+no batidao phonk
+montagem bandido
+lua na praca
+dia delicia
+ritmo de verao
+yanyinyue phonk
+montagem Alquimia
+homage funk
+voce na mira
+funk sicilo
+vem meu amor
+vem vem fude
+jogada slowed
+kompa parano phonk
+tacata phonk
+matadora phonk
+wine in Brazil funk

@@ -1,0 +1,76 @@
+import tkinter as tk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+class CTSInterface:
+    def __init__(self):
+        # --- Configuration des thèmes ---
+        self.THEMES = {
+            "normal": {"bg": "black", "fg": "gold"},
+            "suspect": {"bg": "black", "fg": "darkred"},
+            "dangereux": {"bg": "black", "fg": "red"}
+        }
+        self.current_theme = "normal"
+
+        # --- Fenêtre principale ---
+        self.root = tk.Tk()
+        self.root.title("CyberTriad Shield")
+        self.root.geometry("800x600")
+        self.root.configure(bg=self.THEMES[self.current_theme]["bg"])
+
+        # --- Label d’état ---
+        self.label_status = tk.Label(self.root, text="État : NORMAL",
+                                     font=("Arial", 16),
+                                     bg=self.THEMES[self.current_theme]["bg"],
+                                     fg=self.THEMES[self.current_theme]["fg"])
+        self.label_status.pack(pady=10)
+
+        # --- Graphique Matplotlib ---
+        self.fig, self.ax = plt.subplots(figsize=(6,3))
+        self.ax.set_facecolor("black")
+        self.ax.tick_params(colors="gold")
+        self.line_tcp, = self.ax.plot([], [], color="gold", label="TCP")
+        self.line_udp, = self.ax.plot([], [], color="orange", label="UDP")
+        self.line_icmp, = self.ax.plot([], [], color="white", label="ICMP")
+        self.ax.legend(facecolor="black", edgecolor="gold", labelcolor="gold")
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # --- Données ---
+        self.tcp_data, self.udp_data, self.icmp_data = [], [], []
+
+    def update_stats(self, tcp, udp, icmp, state):
+        # Mise à jour des données
+        self.tcp_data.append(tcp)
+        self.udp_data.append(udp)
+        self.icmp_data.append(icmp)
+
+        # Limiter la taille
+        if len(self.tcp_data) > 50:
+            self.tcp_data.pop(0)
+            self.udp_data.pop(0)
+            self.icmp_data.pop(0)
+
+        # Mise à jour des courbes
+        self.line_tcp.set_data(range(len(self.tcp_data)), self.tcp_data)
+        self.line_udp.set_data(range(len(self.udp_data)), self.udp_data)
+        self.line_icmp.set_data(range(len(self.icmp_data)), self.icmp_data)
+        self.ax.relim()
+        self.ax.autoscale_view()
+        self.canvas.draw()
+
+        # Mise à jour du thème
+        if state != self.current_theme:
+            self.current_theme = state
+            self.root.configure(bg=self.THEMES[state]["bg"])
+            self.label_status.config(text=f"État : {state.upper()}",
+                                     bg=self.THEMES[state]["bg"],
+                                     fg=self.THEMES[state]["fg"])
+            self.ax.set_facecolor(self.THEMES[state]["bg"])
+            self.ax.tick_params(colors=self.THEMES[state]["fg"])
+            for text in self.ax.legend().get_texts():
+                text.set_color(self.THEMES[state]["fg"])
+
+    def run(self):
+        self.root.mainloop()
